@@ -4,17 +4,31 @@
 
 #include "pio_tft.pio.h"
 
+// We use state machine 0 of PIO 0.
+#define PIO pio0
+#define SM 0
+
+// This is a trickey thing. It provides a mask for pio->flevel register
+// to test if the TX Fifo of sm0 has atleast 5 free words or not. It
+// is done by testing the four bits of fifo level has the pattern 00xx.
+static constexpr uint32_t SM_FLEVEL_FREE_5_MASK = 0x000c;
+
+static constexpr uint32_t SM_STALL_MASK = 1u << (PIO_FDEBUG_TXSTALL_LSB + SM);
+
 void PioTft::flush() {
-  // Must evaluate fifo empty before pc. Otherwise the loop can exit
-  // while the SM still processes the last word.
-  while (!pio_sm_is_tx_fifo_empty(pio_, SM) ||
-         pio_sm_get_pc(pio_, SM) != pull_offset_) {
+  for (;;) {
+    // Clear sticky stall status.
+    PIO->fdebug = SM_STALL_MASK;
+    // Exit if stall. All values processed.
+    if (PIO->fdebug & SM_STALL_MASK) {
+      return;
+    }
   }
 }
 
 void PioTft::begin() {
   // Make sure nobody else uses this state machine.
-  pio_sm_claim(pio_, SM);
+  pio_sm_claim(PIO, SM);
 
   // Plain gpio output, non PIO related.
   // gpio_init_mask(1u << tft_dc_pin_);
@@ -22,18 +36,17 @@ void PioTft::begin() {
 
   // Load the PIO program. Starting by default with 16 bits mode
   // since it's at the begining of the PIO program.
-  program_offset_ = pio_add_program(pio_, &tft_io_program);
-  pull_offset_ = program_offset_ + tft_io_offset_pull_16;
+  program_offset_ = pio_add_program(PIO, &tft_io_program);
 
   // Associate pins with the PIO.
-  pio_gpio_init(pio_, tft_wr_pin_);
+  pio_gpio_init(PIO, tft_wr_pin_);
   for (int i = 0; i < 8; i++) {
-    pio_gpio_init(pio_, tft_d0_pin_ + i);
+    pio_gpio_init(PIO, tft_d0_pin_ + i);
   }
 
   // Configure the pins to be outputs.
-  pio_sm_set_consecutive_pindirs(pio_, SM, tft_wr_pin_, 1, true);
-  pio_sm_set_consecutive_pindirs(pio_, SM, tft_d0_pin_, 8, true);
+  pio_sm_set_consecutive_pindirs(PIO, SM, tft_wr_pin_, 1, true);
+  pio_sm_set_consecutive_pindirs(PIO, SM, tft_d0_pin_, 8, true);
 
   // Configure the state machine.
   pio_sm_config c = tft_io_program_get_default_config(program_offset_);
@@ -50,43 +63,29 @@ void PioTft::begin() {
   // first, in a double bytes transfers.
   sm_config_set_out_shift(&c, true, false, 0);
   // Set the SM with the configuration we constructed above.
-  pio_sm_init(pio_, SM, program_offset_, &c);
+  pio_sm_init(PIO, SM, program_offset_, &c);
 
   // Start the state machine.
-  pio_sm_set_enabled(pio_, SM, true);
+  pio_sm_set_enabled(PIO, SM, true);
 }
 
 void PioTft::set_mode_single_byte() {
   flush();
-  pull_offset_ = program_offset_ + tft_io_offset_pull_8;
-  pio_sm_exec(pio_, SM,
-              pio_encode_jmp(program_offset_ + tft_io_offset_start_8));
+  pio_sm_exec(PIO, SM, pio_encode_jmp(program_offset_ + tft_io_offset_start_8));
 }
-
-// void PioTft::s() {
-//   wait_sm_idle();
-//   // DC low indicates non-command mode.
-//   gpio_set_mask(1ul << tft_dc_pin_);
-//   // Select 8 bits program
-//   pull_offset_ = program_offset_ + tft_io_offset_pull_8;
-//   pio_sm_exec(pio_, SM,
-//               pio_encode_jmp(program_offset_ + tft_io_offset_start_8));
-// }
 
 void PioTft::set_mode_double_byte() {
   flush();
-  // DC low indicates non-command mode  mode.
-  // gpio_set_mask(1ul << tft_dc_pin_);
-  // Select 16 bits program.
-  pull_offset_ = program_offset_ + tft_io_offset_pull_16;
-  pio_sm_exec(pio_, SM,
+  pio_sm_exec(PIO, SM,
               pio_encode_jmp(program_offset_ + tft_io_offset_start_16));
 }
 
+void PioTft::write(uint16_t value) { pio_sm_put_blocking(PIO, SM, value); }
+
 // A macro to wait until the TX FIFO has at least
 // 5 free words.
-#define WAIT_FOR_FIFO_5_FREE                       \
-  while ((pio_->flevel) & SM_FLEVEL_FREE_5_MASK) { \
+#define WAIT_FOR_FIFO_5_FREE                      \
+  while ((PIO->flevel) & SM_FLEVEL_FREE_5_MASK) { \
   }
 
 // This is the most challanging loop since it also does
@@ -99,32 +98,32 @@ void PioTft::multi_write(const uint8_t *keys, uint32_t n, uint16_t *map) {
 
   while (p < limit_minus_20) {
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = map[p[0]];
-    pio_->txf[SM] = map[p[1]];
-    pio_->txf[SM] = map[p[2]];
-    pio_->txf[SM] = map[p[3]];
-    pio_->txf[SM] = map[p[4]];
+    PIO->txf[SM] = map[p[0]];
+    PIO->txf[SM] = map[p[1]];
+    PIO->txf[SM] = map[p[2]];
+    PIO->txf[SM] = map[p[3]];
+    PIO->txf[SM] = map[p[4]];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = map[p[5]];
-    pio_->txf[SM] = map[p[6]];
-    pio_->txf[SM] = map[p[7]];
-    pio_->txf[SM] = map[p[8]];
-    pio_->txf[SM] = map[p[9]];
+    PIO->txf[SM] = map[p[5]];
+    PIO->txf[SM] = map[p[6]];
+    PIO->txf[SM] = map[p[7]];
+    PIO->txf[SM] = map[p[8]];
+    PIO->txf[SM] = map[p[9]];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = map[p[10]];
-    pio_->txf[SM] = map[p[11]];
-    pio_->txf[SM] = map[p[12]];
-    pio_->txf[SM] = map[p[13]];
-    pio_->txf[SM] = map[p[14]];
+    PIO->txf[SM] = map[p[10]];
+    PIO->txf[SM] = map[p[11]];
+    PIO->txf[SM] = map[p[12]];
+    PIO->txf[SM] = map[p[13]];
+    PIO->txf[SM] = map[p[14]];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = map[p[15]];
-    pio_->txf[SM] = map[p[16]];
-    pio_->txf[SM] = map[p[17]];
-    pio_->txf[SM] = map[p[18]];
-    pio_->txf[SM] = map[p[19]];
+    PIO->txf[SM] = map[p[15]];
+    PIO->txf[SM] = map[p[16]];
+    PIO->txf[SM] = map[p[17]];
+    PIO->txf[SM] = map[p[18]];
+    PIO->txf[SM] = map[p[19]];
 
     p += 20;
   }
@@ -132,7 +131,7 @@ void PioTft::multi_write(const uint8_t *keys, uint32_t n, uint16_t *map) {
   while (p < limit) {
     // NOTE: 1 free would be sufficient.
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = map[*p++];
+    PIO->txf[SM] = map[*p++];
   }
 }
 
@@ -143,32 +142,32 @@ void PioTft::multi_write(const uint16_t *values, uint32_t n) {
 
   while (p < limit_minus_20) {
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = p[0];
-    pio_->txf[SM] = p[1];
-    pio_->txf[SM] = p[2];
-    pio_->txf[SM] = p[3];
-    pio_->txf[SM] = p[4];
+    PIO->txf[SM] = p[0];
+    PIO->txf[SM] = p[1];
+    PIO->txf[SM] = p[2];
+    PIO->txf[SM] = p[3];
+    PIO->txf[SM] = p[4];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = p[5];
-    pio_->txf[SM] = p[6];
-    pio_->txf[SM] = p[7];
-    pio_->txf[SM] = p[8];
-    pio_->txf[SM] = p[9];
+    PIO->txf[SM] = p[5];
+    PIO->txf[SM] = p[6];
+    PIO->txf[SM] = p[7];
+    PIO->txf[SM] = p[8];
+    PIO->txf[SM] = p[9];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = p[10];
-    pio_->txf[SM] = p[11];
-    pio_->txf[SM] = p[12];
-    pio_->txf[SM] = p[13];
-    pio_->txf[SM] = p[14];
+    PIO->txf[SM] = p[10];
+    PIO->txf[SM] = p[11];
+    PIO->txf[SM] = p[12];
+    PIO->txf[SM] = p[13];
+    PIO->txf[SM] = p[14];
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = p[15];
-    pio_->txf[SM] = p[16];
-    pio_->txf[SM] = p[17];
-    pio_->txf[SM] = p[18];
-    pio_->txf[SM] = p[19];
+    PIO->txf[SM] = p[15];
+    PIO->txf[SM] = p[16];
+    PIO->txf[SM] = p[17];
+    PIO->txf[SM] = p[18];
+    PIO->txf[SM] = p[19];
 
     p += 20;
   }
@@ -176,7 +175,7 @@ void PioTft::multi_write(const uint16_t *values, uint32_t n) {
   while (p < limit) {
     // NOTE: 1 free would be sufficient.
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = *p++;
+    PIO->txf[SM] = *p++;
   }
 }
 
@@ -185,40 +184,40 @@ void PioTft::multi_write(uint16_t value, uint32_t n) {
     //  printf("%u\n", n);
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
 
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
-    pio_->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
+    PIO->txf[SM] = value;
 
     n -= 20;
   }
 
- // printf("z1\n");
+  // printf("z1\n");
   while (n-- > 0) {
     // NOTE: 1 free would be sufficient.
     WAIT_FOR_FIFO_5_FREE;
-    pio_->txf[SM] = value;
+    PIO->txf[SM] = value;
   }
 }
