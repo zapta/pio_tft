@@ -54,6 +54,7 @@ int main() {
     if (elapsed_millis >= 1000) {
       printf("Rects: %lu, pixels: %lu, millis: %lu\n", rects, pixels,
              elapsed_millis);
+      sleep_ms(1000);
       rects = 0;
       pixels = 0;
       start_millis = millis();
