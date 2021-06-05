@@ -43,8 +43,16 @@ int main() {
   for (uint i = 0;; i += 1) {
     uint16_t x1, x2;
     uint16_t y1, y2;
-    rand_range(480, &x1, &x2);
-    rand_range(320, &y1, &y2);
+    if (1) {
+      rand_range(480, &x1, &x2);
+      rand_range(320, &y1, &y2);
+    } else {
+      x1 = 0;
+      x2 = 480 - 1;
+      y1 = 0;
+      y2 = 320 - 1;
+    }
+
     tft_driver::fill_rect(x1, y1, x2, y2, colors[i % NUM_COLORS]);
 
     // Track stats.
