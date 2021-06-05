@@ -2,10 +2,7 @@
 // controller via a 8 bit 8080 style data path.
 
 // Side set: 1 output pin, TFT_WR. Active low.
-// Data set: 8 output pins, TFT_D0 .. TFT_D7
-// X reg: If zero, FIFO has 8 bits values (for TFT commands). If 
-//   non zero, FIFO has 16 bits values (for TFT pixels). X
-//   register is set externally from firmware.
+// Data set: 8 consecutive output pins, TFT_D0 .. TFT_D7
 
 .program tft_io
 .side_set 1 opt ;  The TFT_WR output.
