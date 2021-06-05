@@ -52,8 +52,10 @@ int main() {
     pixels += (1 + x2 - x1) * (1 + y2 - y1);
     const uint32_t elapsed_millis = millis() - start_millis;
     if (elapsed_millis >= 1000) {
-      printf("Rects: %lu, pixels: %lu, millis: %lu\n", rects, pixels,
-             elapsed_millis);
+      const double screens = pixels / (float)(320 * 480);
+      printf(
+          "Rects: %lu, pixels: %lu, millis: %lu, screens: %5.2f overrun: %d\n",
+          rects, pixels, elapsed_millis, screens, tft_driver::is_overrun());
       sleep_ms(1000);
       rects = 0;
       pixels = 0;

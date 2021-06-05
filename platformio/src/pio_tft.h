@@ -5,47 +5,44 @@
 
 #pragma once
 
-#include "hardware/pio.h"
 #include "pico/stdlib.h"
 #include "stdint.h"
 
-class PioTft {
- public:
-  // Clock division of 1 yields an output rate of about 30M bytes/sec.
-  // For a fine tuning of the timing, add/delete delays in pio_tft.pio.
-  PioTft(uint8_t tft_d0_pin, uint8_t tft_wr_pin, uint16_t clock_div = 1)
-      : tft_d0_pin_(tft_d0_pin),
-        tft_wr_pin_(tft_wr_pin),
-        clock_div_(clock_div) {}
+namespace pio_tft {
 
-  void begin();
+// Clock division of 1 yields an output rate of about 30M bytes/sec.
+// For a finer tuning of the timing, add/remove delays in pio_tft.pio.
+void init(uint8_t tft_d0_pin, uint8_t tft_wr_pin, uint16_t clock_div = 1);
 
-  // Flush pending writes and then set mode.
-  //
-  // Single byte mode. Writing the LSB byte of the value.
-  void set_mode_single_byte();
-  // Double byte mode. Writing the MSB then LSB bytes of the value.
-  void set_mode_double_byte();
+// Flush pending writes and then set mode.
+//
+// Single byte mode. Writing the LSB byte of the value.
+void set_mode_single_byte();
+// Double byte mode. Writing the MSB then LSB bytes of the value.
+void set_mode_double_byte();
 
-  // Wait until all pending writes were sent out. Call this
-  // before changing D/C signal.
-  void flush();
+// Returns true if the TX FIFO had an overrung since the
+// last call to this function. A TX FIFO overrun indicates a bug
+// in this driver. For testing.
+bool is_overrun();
 
-  // Writes a single value.
-  void write(uint16_t value);
+// Wait until all pending writes were sent out. Call this
+// function before changing the D/C signal such that it 
+// doesn't affect in-flight values.
+void flush();
 
-  // Writes multiple values. More efficient for large blocks.
-  void multi_write(const uint8_t* keys, uint32_t n, uint16_t* map);
-  void multi_write(const uint16_t* values, uint32_t n);
-  void multi_write(uint16_t value, uint32_t n);
+// Writes a single value.
+void write(uint16_t value);
 
- private:
-  const uint8_t tft_d0_pin_;  // First of 8 pins.
-  const uint8_t tft_wr_pin_;
-  const uint16_t clock_div_;
+// Writes multiple values. More efficient than calling 
+// write() iterativly.
+//
+// This allows to have a 8 bit/pixel buffer and map it on
+// the fly with a lookup table to 16 bits/pixels.
+void multi_write(const uint8_t* keys, uint32_t n, uint16_t* map);
+// Straight forward block output. 
+void multi_write(const uint16_t* values, uint32_t n);
+// Repeatetive output of same value. For rect fill, etc.
+void multi_write(uint16_t value, uint32_t n);
 
-  // Actual pio program offset is set by begin().
-  uint program_offset_ = 0;
-
-  // void wait_sm_idle();
-};
+}  // namespace pio_tft

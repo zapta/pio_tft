@@ -2,10 +2,10 @@
 
 #include "tft_driver.h"
 
+#include <stdio.h>
 
 #include "pico/stdlib.h"
 #include "pio_tft.h"
-#include <stdio.h>
 
 // Plain GPIO output pins.
 #define TFT_RST_PIN 2  // Active low.
@@ -15,7 +15,6 @@
 // Outputs managed by PioTft.
 #define TFT_D0_PIN 6  // First of 8 data pins, [GPIO_6, GPIO_13]
 #define TFT_WR_PIN 1  // Active low
-
 
 #define TFT_RST_HIGH gpio_set_mask(1ul << TFT_RST_PIN)
 #define TFT_DC_HIGH gpio_set_mask(1ul << TFT_DC_PIN)
@@ -42,28 +41,30 @@ namespace tft_driver {
 
 constexpr uint16_t PIO_CLOCK_DIV = 1;
 
-static PioTft pio_tft(  TFT_D0_PIN, TFT_WR_PIN, PIO_CLOCK_DIV);
+//static PioTft pio_tft(TFT_D0_PIN, TFT_WR_PIN, PIO_CLOCK_DIV);
 
+bool is_overrun() { return pio_tft::is_overrun(); }
 
 inline void write_command_byte(uint8_t c) {
   // This also flushes any pending writes.
-  pio_tft.set_mode_single_byte();
+  pio_tft::set_mode_single_byte();
   TFT_DC_LOW;
-  pio_tft.write(c);
+  pio_tft::write(c);
   // Prepear for data bytes that will follow
-  pio_tft.flush();
+  pio_tft::flush();
   TFT_DC_HIGH;
 }
 
 // Assuming already in 8 bits data mode.
 inline void write_data_byte(uint8_t c) {
-  pio_tft.write(c);
+  pio_tft::write(c);
   // No need to flush. Ok to data bytes being queued.
 }
 
 void begin() {
   // A mask with all gpio output pins we use.
-  constexpr uint kOutputMask = 1ul << TFT_RST_PIN | 1ul << TFT_DC_PIN | 1ul << TFT_BL_PIN;
+  constexpr uint kOutputMask =
+      1ul << TFT_RST_PIN | 1ul << TFT_DC_PIN | 1ul << TFT_BL_PIN;
 
   gpio_init_mask(kOutputMask);
 
@@ -72,9 +73,9 @@ void begin() {
   gpio_set_mask(kOutputMask);
   gpio_set_dir_out_masked(kOutputMask);
 
-  pio_tft.begin();
+ pio_tft::init(TFT_D0_PIN, TFT_WR_PIN, PIO_CLOCK_DIV);
 
-
+  //pio_tft::begin();
 
   sleep_ms(5);
   TFT_RST_LOW;
@@ -164,7 +165,6 @@ void begin() {
   sleep_ms(120);
   write_command_byte(ILI9488_DISPON);  // Display on
 
-
   fill_rect(0, 0, 479, 319, 0x1234);
   sleep_ms(50);
   TFT_BL_LOW;  // Backlight on
@@ -187,18 +187,18 @@ void setAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
 
   // Should follow by pixels.
   write_command_byte(ILI9488_RAMWR);  // write to RAM
-  pio_tft.set_mode_double_byte();
+  pio_tft::set_mode_double_byte();
   TFT_DC_HIGH;
 }
 
 void fill_rect(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2,
-                uint16_t color) {
+               uint16_t color) {
   const int32_t w_pixels = x2 - x1 + 1;
   const int32_t h_pixels = y2 - y1 + 1;
   const uint32_t pixels_count = w_pixels * h_pixels;
 
   setAddrWindow(x1, y1, x2, y2);
-  pio_tft.multi_write(color, pixels_count);
+  pio_tft::multi_write(color, pixels_count);
 }
 
 }  // namespace tft_driver
