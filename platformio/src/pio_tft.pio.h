@@ -11,7 +11,7 @@
 // ------ //
 
 #define tft_io_wrap_target 0
-#define tft_io_wrap 9
+#define tft_io_wrap 10
 
 #define tft_io_offset_start_16 0u
 #define tft_io_offset_pull_16 0u
@@ -27,16 +27,17 @@ static const uint16_t tft_io_program_instructions[] = {
     0xa0e1, //  4: mov    osr, x                     
     0x7008, //  5: out    pins, 8         side 0     
     0x0000, //  6: jmp    0                          
-    0x9aa0, //  7: pull   block           side 1 [2] 
-    0x7108, //  8: out    pins, 8         side 0 [1] 
-    0x0007, //  9: jmp    7                          
+    0x98a0, //  7: pull   block           side 1     
+    0xa142, //  8: nop                           [1] 
+    0x7108, //  9: out    pins, 8         side 0 [1] 
+    0x0007, // 10: jmp    7                          
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program tft_io_program = {
     .instructions = tft_io_program_instructions,
-    .length = 10,
+    .length = 11,
     .origin = -1,
 };
 

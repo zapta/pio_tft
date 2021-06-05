@@ -17,6 +17,9 @@ public start_16:
 public pull_16:
    // Fetch into OSR the next 32 bit value from the TX FIFO. 
    // This is a blocking operation. Sets WR high.
+   //
+   // IMPORTANT: PULL should have no delay for PioTft::flush() 
+   // to be correct.
    pull side 1  
    // Shift the OSR reg right by 8 bits, loading the low 8 bits
    // of reg x with the shifted data.
@@ -38,7 +41,11 @@ public start_8:
 public pull_8:
    // Fetch into OSR the next 32 bit value from the TX FIFO. 
    // This is a blocking operation. Sets WR high.
-   pull side 1  [2]  
+   //
+   // IMPORTANT: PULL should have no delay for PioTft::flush() 
+   // to be correct.
+   pull side 1  
+   nop [1]  
    // Write the first byte (LSB) and sets WR low. This also 
    // shifts the OSR right by 8 bits.
    out pins, 8 side 0 [1]     

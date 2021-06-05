@@ -1,34 +1,62 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "pico/stdlib.h"
-#include "pio_tft.h"
+#include "tft_driver.h"
 
-constexpr uint8_t TFT_WR_PIN = 15;
-constexpr uint8_t TFT_DC_PIN = 8;
-constexpr uint8_t TFT_D0_PIN = 0;
-constexpr uint8_t TFT_CLK_DIV = 1;
+// This program uses 8 bits data path. Make sure to wire
+// ILI9488 IM2=1, IM1=1, IM0=0;
 
-static PioTft tft_io(TFT_WR_PIN, TFT_DC_PIN, TFT_D0_PIN, TFT_CLK_DIV);
+#define COLOR(r8, g8, b8)                  \
+  ((uint16_t)(((b8) >> 3) & 0x1FU) << 11 | \
+   (uint16_t)(((g8) >> 2) & 0x3FU) << 5 | (uint16_t)(((r8) >> 3) & 0x1FU))
 
-constexpr int kBfrSize = 100000;
-static uint8_t bfr[kBfrSize];
+constexpr uint NUM_COLORS = 100;
+static uint16_t colors[NUM_COLORS];
 
-static uint16_t color_map[256];
+void rand_range(uint16_t limit, uint16_t* a, uint16_t* b) {
+  uint16_t t1 = ((uint32_t)rand()) % limit;
+  uint16_t t2 = ((uint32_t)rand()) % limit;
+  if (t1 < t2) {
+    *a = t1;
+    *b = t2;
+  } else {
+    // Ok to have t1 == t2;
+    *a = t2;
+    *b = t1;
+  }
+}
+
+uint32_t millis() { return to_ms_since_boot(get_absolute_time()); }
 
 int main() {
   stdio_init_all();
-  tft_io.begin();
+  tft_driver::begin();
 
-  // tft_io.test();
-
-  for (int i = 0; i < 256; i++) {
-    color_map[i] = 0xaa55;
+  for (int i = 0; i < NUM_COLORS; i++) {
+    colors[i] = COLOR(rand() % 256, rand() % 256, rand() % 256);
   }
 
-  tft_io.set_pixels_mode();
-  // tft_io.set_byte_data_mode();
-  for (;;) {
-    // With color mapping.
-    tft_io.write_pixels(bfr, kBfrSize, color_map);
+  uint32_t rects = 0;
+  uint32_t pixels = 0;
+  uint32_t start_millis = millis();
+  for (uint i = 0;; i += 1) {
+    uint16_t x1, x2;
+    uint16_t y1, y2;
+    rand_range(480, &x1, &x2);
+    rand_range(320, &y1, &y2);
+    tft_driver::fill_rect(x1, y1, x2, y2, colors[i % NUM_COLORS]);
+
+    // Track stats.
+    rects++;
+    pixels += (1 + x2 - x1) * (1 + y2 - y1);
+    const uint32_t elapsed_millis = millis() - start_millis;
+    if (elapsed_millis >= 1000) {
+      printf("Rects: %lu, pixels: %lu, millis: %lu\n", rects, pixels,
+             elapsed_millis);
+      rects = 0;
+      pixels = 0;
+      start_millis = millis();
+    }
   }
 }
