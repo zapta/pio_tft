@@ -37,6 +37,8 @@ int main() {
     colors[i] = COLOR(rand() % 256, rand() % 256, rand() % 256);
   }
 
+  sleep_ms(1000);
+
   uint32_t rects = 0;
   uint32_t pixels = 0;
   uint32_t start_millis = millis();

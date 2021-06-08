@@ -9,12 +9,12 @@
 
 // Plain GPIO output pins.
 #define TFT_RST_PIN 2  // Active low.
-#define TFT_DC_PIN 0   // 1: data, 0: command.
-#define TFT_BL_PIN 15  // Active low
+#define TFT_DC_PIN 28   // 1: data, 0: command.
+#define TFT_BL_PIN 15  // Active high
 
 // Outputs managed by PioTft.
 #define TFT_D0_PIN 6  // First of 8 data pins, [GPIO_6, GPIO_13]
-#define TFT_WR_PIN 1  // Active low
+#define TFT_WR_PIN 22  // Active low
 
 #define TFT_RST_HIGH gpio_set_mask(1ul << TFT_RST_PIN)
 #define TFT_DC_HIGH gpio_set_mask(1ul << TFT_DC_PIN)
@@ -68,9 +68,10 @@ void begin() {
 
   gpio_init_mask(kOutputMask);
 
-  // Start with backlight non active. Before we set it as a direction,
-  // an external pullup resistor makes sure  it's high.
-  gpio_set_mask(kOutputMask);
+  // Start with backlight non active, efore we set it as an
+  // output, to avoid startup flicker.
+  TFT_BL_LOW;
+
   gpio_set_dir_out_masked(kOutputMask);
 
  pio_tft::init(TFT_D0_PIN, TFT_WR_PIN, PIO_CLOCK_DIV);
@@ -167,7 +168,7 @@ void begin() {
 
   fill_rect(0, 0, 479, 319, 0x1234);
   sleep_ms(50);
-  TFT_BL_LOW;  // Backlight on
+  TFT_BL_HIGH;  // Backlight on
 }
 
 // This is followed by a stream of pixels to render in this
