@@ -5,7 +5,7 @@
 #include "tft_driver.h"
 
 // This program uses 8 bits data path. Make sure to wire
-// ILI9488 IM2=1, IM1=1, IM0=0;
+// ILI9488 IM2=0, IM1=1, IM0=1;
 
 #define COLOR(r8, g8, b8)                  \
   ((uint16_t)(((b8) >> 3) & 0x1FU) << 11 | \
